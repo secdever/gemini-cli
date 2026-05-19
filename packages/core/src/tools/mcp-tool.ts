@@ -273,10 +273,19 @@ export class DiscoveredMCPToolInvocation extends BaseToolInvocation<
         args: this.params,
       },
     ];
+    const executionTimeoutMs = (this.mcpTool as any).timeout ?? 10 * 60 * 1000;
 
     // Race MCP tool call with abort signal to respect cancellation
     const rawResponseParts = await new Promise<Part[]>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+      cleanup();
+      const error = new Error(`MCP Tool execution timed out after ${executionTimeoutMs}ms`);
+      error.name = 'TimeoutError';
+      reject(error);
+    }, executionTimeoutMs);
+      
       if (signal.aborted) {
+        clearTimeout(timeoutId);
         const error = new Error('Tool call aborted');
         error.name = 'AbortError';
         reject(error);
@@ -289,6 +298,7 @@ export class DiscoveredMCPToolInvocation extends BaseToolInvocation<
         reject(error);
       };
       const cleanup = () => {
+        clearTimeout(timeoutId);
         signal.removeEventListener('abort', onAbort);
       };
       signal.addEventListener('abort', onAbort, { once: true });
